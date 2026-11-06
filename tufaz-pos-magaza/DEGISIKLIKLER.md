@@ -1,3 +1,38 @@
+# TUFAZ POS Mağaza — Sürüm 2.1.0: tema birliği
+
+Tarih: 6 Kasım 2026. 2.0.0 sonrası geri bildirim: “Hâlâ tema uyumsuzluğu var, her şey birbiriyle uyumlu olsun.”
+
+## Sorunun kaynağı (ölçüldü)
+
+Sitede dört ayrı renk dünyası vardı:
+
+| Parça | 2.0.0’daki renk | Logo ve arayüzle ilişkisi |
+|---|---|---|
+| 14 ürün çizimi (SVG) | Deniz yeşili / mint (`#142e3c`, `#285d60`, `#b9f0d8`) | Logoda ve arayüzde yeşil yok |
+| Vitrin slaytları | Lacivert, buz mavisi, lime: her slayt ayrı zemin | Slayt değişince sayfanın teması değişiyordu |
+| Kategori kartları ve sayfa başlıkları | Lavanta, buz mavisi, lime, bej: dört ayrı pastel | Her kategori ayrı tema gibi duruyordu |
+| Fotoğraflar | Gök mavisi zemin, lime zemin, turuncu ahşap restoran | Sıcak ahşap tonu tamamen dışarıdaydı |
+| Koyu mod | Yoktu | Telefon koyu moddayken tarayıcı siteyi kendi başına koyulaştırıp renkleri bozabiliyordu |
+
+## Yapılan
+
+- **Tek palet:** logo laciverti (`#081a3b`), marka mavisi (`#2a46d6`), açık mavi-gri yüzeyler ve tek vurgu rengi lime (`#d4f56b`). CSS’teki bütün renkler token’lardan geliyor; token dışında sabit renk yok (yalnız mavi/lacivert üstündeki beyaz yazı).
+- **Tek kural:** Lacivert kartlar her sayfayı çerçeveliyor (vitrin, tüm iç sayfa başlıkları, ürün görsel çerçevesi, kurulum bandı, hesap sonucu, alt bilgi). Lacivert üstünde ana düğme lime, açık zeminde marka mavisi.
+- **Vitrin:** Üç slayt da aynı lacivert kart. Görsel sağda, aynı köşe yarıçapında bir çerçevede. Slayt değişince yalnız içerik değişiyor, tema değil.
+- **Kategoriler ve ürün kartları:** Dört pastel kaldırıldı. Hepsi aynı beyaz kart, görsel alanı aynı açık mavi-gri.
+- **Görseller yeniden boyandı:** 14 SVG’de yeşil/mint tonları marka mavisine taşındı. Vitrin fotoğrafındaki nane yeşili vurgular lime’a çevrildi (sitedeki vurgu rengiyle aynı). Cihaz ve NFC fotoğraflarının zeminleri açık mavi-griye, restoran fotoğrafı lacivert-mavi üç tona alındı. Favicon’daki teal çatı lime oldu.
+- **Açık ve koyu tema:** Aynı kurallarla iki tema. Telefonun ayarını izler; menünün altında ve alt bilgide **Sistem / Açık / Koyu** seçimi var (seçim yalnız o tarayıcıda saklanır, ilk çizimden önce uygulanır, sayfa geçişinde yanıp sönme olmaz). `color-scheme` bildirildiği için tarayıcılar siteyi kendi başına koyulaştırmaz. Koyu temada logo açık sürüme geçer, açık zeminli ürün görselleri hafifçe kısılır.
+- Sürüm parametresi 2.1.0’a çıktı; tarayıcılar eski CSS’i önbellekten getirmez. `/favicon.ico` isteği artık 404 sayfası yerine simgeye yönlenir.
+
+## Doğrulama
+
+- Testler: 2/2 geçti. Yeni kontroller: `color-scheme` etiketi, görünüm seçici, koyu logo, koyu tema CSS’i, bölüm bazlı renk sınıflarının kalmadığı, theme.js ve favicon yönlendirmesi.
+- Açık ve koyu temada 1366 px ve 390 px’te 5 sayfa: konsol hatası yok, yatay taşma yok.
+- Görünüm seçici: Koyu seçildi → başka sayfaya geçildi → koyu kaldı → Sistem’e dönüldü.
+- Sepetten talebe uçtan uca akış, yönetim paneli, 82 sayfalık metin denetimi ve bağlantı taraması yeniden geçti.
+
+---
+
 # TUFAZ POS Mağaza — Sürüm 2.0.0 değişiklikleri
 
 Tarih: 6 Kasım 2026. Önceki sürüm: 1.2.0 (Sitess.zip).

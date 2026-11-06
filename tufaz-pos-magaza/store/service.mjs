@@ -99,6 +99,9 @@ export async function handle(req,env) {
         : "User-agent: *\nDisallow: /\n";
       return new Response(head?null:text,{headers:{"content-type":"text/plain;charset=utf-8","cache-control":"no-store"}});
     }
+    if (path === "/favicon.ico" && (req.method === "GET" || head)) {
+      return new Response(null,{status:301,headers:{location:"/assets/favicon.svg","cache-control":"public, max-age=86400"}});
+    }
     if (path === "/sitemap.xml" && (req.method === "GET" || head)) {
       const {state} = await readState(env);
       if (!storefrontSettings(state.settings).indexing) return new Response(null,{status:404});

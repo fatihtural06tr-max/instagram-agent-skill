@@ -2,7 +2,7 @@ import {categories,storefrontSettings} from "./seed.mjs";
 import {topics,solutionPaths,featurePaths,productGuide} from "./topics.mjs";
 import {addable,cartMode,maxQuantity,priceText,productPath,productType,publiclyVisible,businessTypes} from "./model.mjs";
 
-export const VERSION = "2.0.0";
+export const VERSION = "2.1.0";
 export const h = value => String(value ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const icons = {
   arrow:"M4 12h15m-6-6 6 6-6 6", back:"M20 12H5m6-6-6 6 6 6", bag:"M5 8h14l2 13H3L5 8Zm3 1V6a4 4 0 0 1 8 0v3",
@@ -25,7 +25,6 @@ const legacyProductArt = {
   "garson-terminali":["qr","el-cihazi"],
   "musteri-ekrani":["terminal","kasa-musteri-ekrani"],
 };
-const tone = p => "tone-" + (p.category || "yazilim");
 function productVisual(p,cls="",eager=false) {
   const art = Object.hasOwn(legacyProductArt,p.id) ? legacyProductArt[p.id] : null;
   const image = art && p.image === `/assets/${art[0]}.svg` ? `/assets/${art[1]}.svg` : p.image;
@@ -59,7 +58,7 @@ function breadcrumbLd(items,origin) {
     "@type":"ListItem",position:i+1,name,...(url?{item:origin+url}:{})}))};
 }
 function pageHead({trail,eyebrow="",title,desc="",actions="",toneName="neutral",extra=""}) {
-  return `<header class="page-head tone-${toneName}">${trail?crumbs(trail):""}
+  return `<header class="page-head">${trail?crumbs(trail):""}
     <div class="page-head-body"><div>${eyebrow?`<p class="eyebrow">${h(eyebrow)}</p>`:""}<h1>${h(title)}</h1>${desc?`<p class="page-intro">${h(desc)}</p>`:""}</div>
     ${actions?`<div class="page-head-actions">${actions}</div>`:""}</div>${extra}</header>`;
 }
@@ -75,7 +74,8 @@ const menuGroups = [
 function base(title,content,{description="",page="store",admin=false,path="/",robots="noindex,nofollow",canonical="",origin="",ld=[],settings={}}={}) {
   const brandName="TUFAZ Teknoloji";
   const isActive = url => path===url || (url!=="/" && path.startsWith(url+"/")) || url==="/fiyatlar"&&path.startsWith("/paketler");
-  const logo = `<img src="${asset("tufaz-logo-mark.webp")}" width="145" height="88" alt="TUFAZ Teknoloji">`;
+  const logo = `<img class="logo-light" src="${asset("tufaz-logo-mark.webp")}" width="145" height="88" alt="TUFAZ Teknoloji"><img class="logo-dark" src="${asset("tufaz-logo-light.png")}" width="145" height="88" alt="" aria-hidden="true">`;
+  const themeSwitch = `<div class="theme-switch" role="group" aria-label="Görünüm">${[["system","Sistem"],["light","Açık"],["dark","Koyu"]].map(([v,n])=>`<button type="button" data-theme-set="${v}" aria-pressed="${v==="system"}">${n}</button>`).join("")}</div>`;
   const search = (id,placeholder="Ürün, yazılım veya cihaz ara") => `<form class="site-search" action="/magaza" method="get" role="search">
     <label class="sr-only" for="${id}">Mağazada ara</label><input type="search" name="q" id="${id}" placeholder="${placeholder}" maxlength="100" autocomplete="off">
     <button type="submit" aria-label="Ara">${icon("search")}</button></form>`;
@@ -94,7 +94,9 @@ function base(title,content,{description="",page="store",admin=false,path="/",ro
   return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
     <title>${h(pageTitle)}</title>
     <meta name="description" content="${h(desc)}">
-    <meta name="robots" content="${robots}"><meta name="theme-color" content="#f3f5fb">
+    <meta name="robots" content="${robots}"><meta name="color-scheme" content="light dark">
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2f4fa"><meta name="theme-color" media="(prefers-color-scheme: dark)" content="#060d1f">
+    <script src="${asset("theme.js")}"></script>
     ${canonical?`<link rel="canonical" href="${h(origin+canonical)}">`:""}
     <meta property="og:type" content="website"><meta property="og:locale" content="tr_TR"><meta property="og:site_name" content="${brandName}">
     <meta property="og:title" content="${h(pageTitle)}"><meta property="og:description" content="${h(desc)}">
@@ -118,7 +120,7 @@ function base(title,content,{description="",page="store",admin=false,path="/",ro
         <button type="button" class="drawer-close" data-menu-close aria-label="Menüyü kapat">${icon("close")}</button></div>
       <div class="drawer-search">${search("drawer-search","Ne arıyorsunuz?")}</div>
       <div class="drawer-groups">${groups}</div>
-      <div class="drawer-foot"><a class="btn primary" href="/fiyatlar">Paketleri gör${icon("arrow")}</a><a class="btn secondary" href="/iletisim">Teklif iste</a>
+      <div class="drawer-foot"><div class="drawer-theme"><span>Görünüm</span>${themeSwitch}</div><a class="btn primary" href="/fiyatlar">Paketleri gör${icon("arrow")}</a><a class="btn secondary" href="/iletisim">Teklif iste</a>
         ${phone?`<a class="drawer-contact" href="tel:${h(phone.replace(/[ ()-]/g,""))}">${h(phone)}</a>`:""}${email?`<a class="drawer-contact" href="mailto:${h(email)}">${h(email)}</a>`:""}</div>
     </nav>
     <main id="main">${content}</main>
@@ -127,7 +129,7 @@ function base(title,content,{description="",page="store",admin=false,path="/",ro
         <p>Restoran, kafe ve oyun kafeler için adisyon yazılımı, kasa ekipmanı ve NFC ürünleri.</p>
         ${phone?`<a href="tel:${h(phone.replace(/[ ()-]/g,""))}">${h(phone)}</a>`:""}${email?`<a href="mailto:${h(email)}">${h(email)}</a>`:""}</div>
       ${footerCols.map(([name,links])=>`<nav class="footer-col" aria-label="${h(name)}"><h2>${h(name)}</h2>${links.map(([url,label])=>`<a href="${url}">${h(label)}</a>`).join("")}</nav>`).join("")}
-    </div><div class="wrap foot-end"><p>© ${new Date().getFullYear()} TUFAZ Teknoloji. Fiyatlar KDV hariçtir.</p><p>Görseller temsilidir.</p></div></footer>
+    </div><div class="wrap foot-end"><p>© ${new Date().getFullYear()} TUFAZ Teknoloji. Fiyatlar KDV hariçtir. Görseller temsilidir.</p>${themeSwitch}</div></footer>
     <div class="toast" hidden id="toast"><div>${icon("check")}<span id="toast-message" role="status"></span></div><a href="/sepet">Sepeti Gör</a><button type="button" class="toast-close" aria-label="Bildirimi kapat">×</button></div>
     </body></html>`;
 }
@@ -136,22 +138,22 @@ function plansOf(state) {
   return state.products.filter(p=>p.category==="yazilim" && p.period!=="once" && publiclyVisible(p));
 }
 const shopFamilies = [
-  {path:"/yazilim",name:"Yazılım",desc:"Adisyon paketleri, mutfak ekranı, QR menü ve modüller",art:"kitchen.svg",tone:"yazilim"},
-  {path:"/donanim",name:"Donanım",desc:"Kasa, fiş yazıcı, el terminali ve müşteri ekranı",art:"market-devices.webp",tone:"donanim"},
-  {path:"/nfc",name:"DOKUN NFC",desc:"Menü, Google yorum, Wi-Fi ve bağlantı kartları",art:"market-nfc.webp",tone:"nfc"},
-  {path:"/hizmet",name:"Kurulum ve hizmet",desc:"Cihaz, menü aktarımı ve personel eğitimi",art:"servis-sahnesi.webp",tone:"hizmet"},
+  {path:"/yazilim",name:"Yazılım",desc:"Adisyon paketleri, mutfak ekranı, QR menü ve modüller",art:"pos.svg"},
+  {path:"/donanim",name:"Donanım",desc:"Kasa, fiş yazıcı, el terminali ve müşteri ekranı",art:"market-devices.webp"},
+  {path:"/nfc",name:"DOKUN NFC",desc:"Menü, Google yorum, Wi-Fi ve bağlantı kartları",art:"market-nfc.webp"},
+  {path:"/hizmet",name:"Kurulum ve hizmet",desc:"Cihaz, menü aktarımı ve personel eğitimi",art:"servis-sahnesi-mobil.webp"},
 ];
 const slides = [
-  {key:"adisyon",name:"Adisyon",tone:"midnight",image:"market-hero.webp",caption:"Temsili kasa ekipmanı"},
-  {key:"donanim",name:"Donanım",tone:"ice",image:"market-devices.webp",caption:"Temsili fiş yazıcı ve barkod okuyucu"},
-  {key:"nfc",name:"DOKUN NFC",tone:"lime",image:"market-nfc.webp",caption:"Temsili NFC kartları"},
+  {key:"adisyon",name:"Adisyon",image:"market-hero.webp",mobile:"market-hero-mobile.webp",caption:"Temsili kasa ekipmanı"},
+  {key:"donanim",name:"Donanım",image:"market-devices.webp",caption:"Temsili fiş yazıcı ve barkod okuyucu"},
+  {key:"nfc",name:"DOKUN NFC",image:"market-nfc.webp",caption:"Temsili NFC kartları"},
 ];
 
 function productCard(p, heading="h3") {
   const badge = statusBadge(p);
   const mode = cartMode(p);
   return `<article class="market-product">
-    <a class="product-art ${tone(p)}" href="${productPath(p)}" tabindex="-1" aria-hidden="true">
+    <a class="product-art" href="${productPath(p)}" tabindex="-1" aria-hidden="true">
       ${productVisual(p)}${badge?`<span class="product-badge">${badge}</span>`:""}
     </a>
     <div class="product-body"><p class="product-kind">${h(categories[p.category])}${p.subcategory?`<span class="kind-sub"> · ${h(p.subcategory)}</span>`:""}</p>
@@ -200,13 +202,13 @@ function home(state) {
     .filter((p,i,a)=>p&&a.indexOf(p)===i).slice(0,8);
   return `${notice?`<div class="announcement"><div class="wrap">${h(notice)}</div></div>`:""}
   <section class="wrap hero-shell" data-campaign aria-label="Mağaza vitrini">
-    ${slides.map((s,i)=>`<div class="campaign-panel tone-${s.tone}" id="slide-${s.key}"${i?" hidden":""}>
-      <picture class="campaign-picture">${i===0?'<source media="(max-width: 700px)" srcset="/assets/market-hero-mobile.webp">':""}<img src="/assets/${s.image}" width="1280" height="853" alt=""${i===0?' fetchpriority="high"':' loading="lazy"'}></picture>
-      <div class="campaign-inner"><div class="campaign-copy">
+    ${slides.map((s,i)=>`<div class="campaign-panel" id="slide-${s.key}"${i?" hidden":""}>
+      <div class="campaign-copy">
         <p class="campaign-index"><span></span> ${["TUFAZ POS adisyon","Kasa ve mutfak donanımı","DOKUN NFC"][i]}</p>
         ${i===0?`<h1>${h(copy[i][0])}</h1>`:`<h2>${h(copy[i][0])}</h2>`}<p class="campaign-lead">${h(copy[i][1])}</p>
         <div class="campaign-actions">${copy[i][2]}${copy[i][3]}</div>
-      </div><p class="art-caption">${s.caption}</p></div>
+      </div>
+      <figure class="campaign-frame"><picture>${s.mobile?`<source media="(max-width: 700px)" srcset="/assets/${s.mobile}">`:""}<img src="/assets/${s.image}" width="1280" height="853" alt=""${i===0?' fetchpriority="high"':' loading="lazy"'}></picture><figcaption class="art-caption">${s.caption}</figcaption></figure>
     </div>`).join("")}
     <div class="campaign-controls"><div class="campaign-tabs" role="group" aria-label="Vitrin seçimi">
       ${slides.map((s,i)=>`<button type="button" data-slide="${s.key}" aria-controls="slide-${s.key}" aria-pressed="${i===0}"><span>0${i+1}</span> ${s.name}</button>`).join("")}
@@ -222,7 +224,7 @@ function home(state) {
     ${productGrid(plans)}</section>`:""}
 
   <section class="wrap market-section"><div class="market-heading"><div><p class="eyebrow">Mağaza</p><h2>Kategorileri keşfet</h2></div>${link("/magaza","Tüm ürünler")}</div>
-    <div class="family-grid">${shopFamilies.map((c,i)=>`<a class="family tone-${c.tone}" href="${c.path}"><div class="family-copy"><span>0${i+1}</span><h3>${c.name}</h3><p>${c.desc}</p></div><img src="/assets/${c.art}" width="760" height="510" alt="" loading="lazy"><span class="family-arrow">${icon("arrow")}</span></a>`).join("")}</div>
+    <div class="family-grid">${shopFamilies.map((c,i)=>`<a class="family" href="${c.path}"><div class="family-copy"><span>0${i+1}</span><h3>${c.name}</h3><p>${c.desc}</p></div><div class="family-media"><img src="/assets/${c.art}" width="760" height="510" alt="" loading="lazy"><span class="family-arrow">${icon("arrow")}</span></div></a>`).join("")}</div>
   </section>
 
   ${featured.length?`<section class="wrap market-section featured-section"><div class="market-heading"><div><p class="eyebrow">Öne çıkanlar</p><h2>Sık birlikte seçilenler</h2></div><div class="rail-controls"><button type="button" data-rail-step="-1" aria-label="Önceki ürünler">${icon("back")}</button><button type="button" data-rail-step="1" aria-label="Sonraki ürünler">${icon("arrow")}</button></div></div>
@@ -329,7 +331,7 @@ function detail(p,state,origin) {
     offers:{"@type":"Offer",url:origin+productPath(p),priceCurrency:"TRY",price:(p.price/100).toFixed(2),availability:"https://schema.org/InStock"}});
   return {trail,ld,html:`<div class="wrap page">${crumbs(trail)}
     <section class="product-detail">
-      <figure class="detail-art ${tone(p)}">${productVisual(p,"",true)}${p.image?.startsWith("/assets/")?"<figcaption>Temsili ürün görseli</figcaption>":""}</figure>
+      <figure class="detail-art">${productVisual(p,"",true)}${p.image?.startsWith("/assets/")?"<figcaption>Temsili ürün görseli</figcaption>":""}</figure>
       <div class="detail-copy">
         <p class="eyebrow">${h(cat)}${p.subcategory?` · ${h(p.subcategory)}`:""}</p>
         <h1>${h(p.name)}</h1><p class="page-intro">${h(p.brief)}</p>

@@ -121,6 +121,16 @@ test("Mağaza, yönetim, görsel ve kupon işlemleri", async t => {
   const home=await html("/");
   assert.match(home,/aria-controls="site-menu"/);
   assert.match(home,/id="site-menu"/);
+  // Tek tema sistemi: açık/koyu desteği bildirilir, görünüm seçici ve iki logo sürümü vardır.
+  assert.match(home,/<meta name="color-scheme" content="light dark">/);
+  assert.match(home,/data-theme-set="dark"/);
+  assert.match(home,/class="logo-dark"/);
+  assert.doesNotMatch(home,/tone-(ice|lime|midnight|yazilim|donanim|nfc|hizmet)/,"Bölüm bazlı renk temaları kaldırılmış olmalı");
+  const css=await fetch(origin+"/assets/store.css").then(r=>r.text());
+  assert.match(css,/:root\[data-theme="dark"\]/);
+  assert.match(css,/prefers-color-scheme: dark/);
+  assert.equal((await fetch(origin+"/assets/theme.js")).status,200);
+  assert.equal((await fetch(origin+"/favicon.ico",{redirect:"manual"})).status,301);
   assert.match(await html("/yazilim/bas-konus"),/href="\/sesli-siparis"/);
   assert.match(await html("/kazanc-hesaplayici"),/nakit tasarruf değildir/);
   assert.match(await html("/yazilim/qr-menu"),/rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/yazilim\/qr-menu"/);

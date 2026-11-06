@@ -19,6 +19,20 @@
   window.Tufaz={$ ,list,h,tl,api,msg};
   const motion = matchMedia("(prefers-reduced-motion: reduce)");
 
+  // Görünüm: Sistem / Açık / Koyu. Seçim yalnız bu tarayıcıda saklanır; ilk çizimde theme.js uygular.
+  const themeKey = "tufaz-theme";
+  const markTheme = value => { for (const b of list("[data-theme-set]")) b.setAttribute("aria-pressed",String(b.dataset.themeSet===value)); };
+  markTheme(document.documentElement.dataset.theme || "system");
+  document.addEventListener("click",e=>{
+    const button = e.target.closest("[data-theme-set]");
+    if (!button) return;
+    const value = button.dataset.themeSet;
+    if (value==="light" || value==="dark") document.documentElement.dataset.theme = value;
+    else delete document.documentElement.dataset.theme;
+    try { value==="system" ? localStorage.removeItem(themeKey) : localStorage.setItem(themeKey,value); } catch {}
+    markTheme(value);
+  });
+
   // Hamburger menü
   const drawer = $("#site-menu");
   const backdrop = $(".drawer-backdrop");
