@@ -6,7 +6,8 @@ import {readFile,writeFile,access,mkdir} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
 import {dirname,join,resolve} from "node:path";
 import {parseArgs} from "node:util";
-import {initialState} from "../store/seed.mjs";
+import {gzipSync} from "node:zlib";
+import {initialState,migrateState} from "../store/seed.mjs";
 import {handle} from "../store/service.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -26,6 +27,12 @@ db.exec("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; CREATE TABLE IF 
 db.prepare("INSERT OR IGNORE INTO storefront_state VALUES (1,0,?)").run(JSON.stringify(initialState()));
 const select = db.prepare("SELECT revision,payload FROM storefront_state WHERE id=1");
 const update = db.prepare("UPDATE storefront_state SET revision=revision+1,payload=? WHERE id=1 AND revision=?");
+{
+  // Eski kayıtları yeni sürüme bir kez taşı (yalnız eksik ürünler eklenir).
+  const row = select.get();
+  const state = JSON.parse(row.payload);
+  if (migrateState(state)) update.run(JSON.stringify(state),row.revision);
+}
 const sessions = new Map();
 const attempts = new Map();
 const cookieName = "tufaz_admin";
@@ -83,12 +90,15 @@ const env = {
   auth,
 };
 const mime = {svg:"image/svg+xml",png:"image/png",webp:"image/webp",js:"text/javascript; charset=utf-8",css:"text/css; charset=utf-8"};
+const compressible = /^(text\/|application\/(json|xml)|image\/svg)/;
 async function incoming(raw) {
   const url = new URL(raw.url,origin || "http://" + (raw.headers.host || "localhost"));
   if (["GET","HEAD"].includes(raw.method) && /^\/assets\/[a-z0-9-]+\.(svg|png|webp|js|css)$/.test(url.pathname)) {
     const file = await readFile(join(root,"public",url.pathname)).catch(error=>{if(error.code==="ENOENT")return null;throw error});
     if (!file) return new Response(null,{status:404});
-    return new Response(raw.method === "HEAD" ? null : file,{headers:{"content-type":mime[url.pathname.split(".").at(-1)],"x-content-type-options":"nosniff"}});
+    // Sürüm parametreli dosyalar uzun süre önbellekte tutulur; sürüm değişince adres de değişir.
+    const cache = url.searchParams.has("v") ? "public, max-age=2592000, immutable" : "public, max-age=600";
+    return new Response(raw.method === "HEAD" ? null : file,{headers:{"content-type":mime[url.pathname.split(".").at(-1)],"x-content-type-options":"nosniff","cache-control":cache}});
   }
   const headers = new Headers(raw.headers);
   headers.set("x-tufaz-local-ip",raw.socket.remoteAddress || "");
@@ -98,7 +108,18 @@ async function incoming(raw) {
 const server=createServer(async (raw,out)=>{
   try {
     const response=await incoming(raw);
-    out.writeHead(response.status,Object.fromEntries(response.headers));
+    const headers=Object.fromEntries(response.headers);
+    const type=response.headers.get("content-type")||"";
+    if(response.body && raw.method==="GET" && compressible.test(type) && /\bgzip\b/.test(raw.headers["accept-encoding"]||"")){
+      const bytes=Buffer.from(await response.arrayBuffer());
+      const body=bytes.length>1024?gzipSync(bytes):bytes;
+      if(body!==bytes){headers["content-encoding"]="gzip";headers.vary="Accept-Encoding";}
+      headers["content-length"]=String(body.length);
+      out.writeHead(response.status,headers);
+      out.end(body);
+      return;
+    }
+    out.writeHead(response.status,headers);
     if(response.body) Readable.fromWeb(response.body).pipe(out);
     else out.end();
   } catch(error) {

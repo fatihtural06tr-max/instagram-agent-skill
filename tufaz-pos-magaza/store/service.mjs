@@ -1,6 +1,6 @@
-import {initialState,storefrontSettings} from "./seed.mjs";
+import {initialState,storefrontSettings,migrateState} from "./seed.mjs";
 import {quoteCart,submitRequest,updateAdmin,InputError,publiclyVisible} from "./model.mjs";
-import {renderPage} from "./pages.mjs";
+import {renderPage,sitemapPaths} from "./pages.mjs";
 
 const JSON_HEADERS = {"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"};
 const json = (data,status=200,headers={}) => Response.json(data,{status,headers:{...JSON_HEADERS,...headers}});
@@ -49,9 +49,15 @@ function mediaType(bytes) {
   deny("PNG, JPEG veya WebP görsel yükleyin.",415);
 }
 
+async function readState(env) {
+  const current = await env.db.read();
+  migrateState(current.state);
+  return current;
+}
+
 async function change(env, transform, revision = null) {
   for (let attempt=0; attempt<5; attempt++) {
-    const current = await env.db.read();
+    const current = await readState(env);
     if (revision !== null && current.revision !== revision) deny("Bu sırada bir kayıt değişti. Paneli yenileyip tekrar deneyin.",409);
     const result = transform(current.state);
     if (!result.changed) return {...result.data,revision:current.revision};
@@ -86,12 +92,25 @@ export async function handle(req,env) {
   const head = req.method === "HEAD";
   try {
     if (path === "/robots.txt" && (req.method === "GET" || head)) {
-      return new Response(head?null:"User-agent: *\nDisallow: /\n",{headers:{"content-type":"text/plain;charset=utf-8"}});
+      const {state} = await readState(env);
+      const open = storefrontSettings(state.settings).indexing;
+      const text = open
+        ? "User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\nDisallow: /sepet\nDisallow: /odeme\nDisallow: /siparis/\nDisallow: /hesap\nSitemap: " + url.origin + "/sitemap.xml\n"
+        : "User-agent: *\nDisallow: /\n";
+      return new Response(head?null:text,{headers:{"content-type":"text/plain;charset=utf-8","cache-control":"no-store"}});
+    }
+    if (path === "/sitemap.xml" && (req.method === "GET" || head)) {
+      const {state} = await readState(env);
+      if (!storefrontSettings(state.settings).indexing) return new Response(null,{status:404});
+      const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+      const xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+        sitemapPaths(state).map(p=>"  <url><loc>"+esc(url.origin+p)+"</loc></url>").join("\n") + "\n</urlset>\n";
+      return new Response(head?null:xml,{headers:{"content-type":"application/xml;charset=utf-8","cache-control":"no-store"}});
     }
     if (path.startsWith("/media/") && (req.method === "GET" || head)) {
       const id = path.slice(7);
       if (!/^[0-9a-f-]{36}\.(webp|png|jpg)$/.test(id)) return new Response(null,{status:404});
-      const {state} = await env.db.read();
+      const {state} = await readState(env);
       const shown = state.products.some(p => p.image === path && publiclyVisible(p));
       if (!shown && !env.auth.allowed(req)) return new Response(null,{status:404});
       const file = await env.media.read(id);
@@ -102,7 +121,7 @@ export async function handle(req,env) {
     if (path === "/api/quote") {
       writeMethod(req);
       const data = await body(req);
-      return json(quoteCart((await env.db.read()).state,data));
+      return json(quoteCart((await readState(env)).state,data));
     }
     if (path === "/api/request") {
       writeMethod(req);
@@ -112,18 +131,18 @@ export async function handle(req,env) {
     }
     if (path === "/api/admin/login") {
       writeMethod(req);
-      if (!env.auth.login) deny("Bu kurulum ChatGPT oturumu kullanır.",404);
+      if (!env.auth.login) deny("Bu kurulumda parola ile giriş kapalı.",404);
       return env.auth.login(req,await body(req,3000));
     }
     if (path === "/api/admin/logout") {
       writeMethod(req);
-      if (!env.auth.logout) deny("Bu kurulum ChatGPT oturumu kullanır.",404);
+      if (!env.auth.logout) deny("Bu kurulumda parola ile giriş kapalı.",404);
       return env.auth.logout(req);
     }
     if (path.startsWith("/api/admin/")) {
       if (!env.auth.allowed(req)) deny("Yönetici oturumu gerekiyor.",401);
       if (path === "/api/admin/state" && req.method === "GET") {
-        const snapshot = await env.db.read();
+        const snapshot = await readState(env);
         snapshot.state.settings = storefrontSettings(snapshot.state.settings);
         return json(snapshot);
       }
@@ -148,7 +167,7 @@ export async function handle(req,env) {
     }
     if (path.startsWith("/api/")) return json({error:"Bu işlem bulunamadı."},404);
     if (req.method !== "GET" && !head) return json({error:"İstek yöntemi desteklenmiyor."},405);
-    const {state} = await env.db.read();
+    const {state} = await readState(env);
     const page = renderPage(path,url,state,{authorized:env.auth.allowed(req),local:!!env.auth.login,configured:env.auth.configured});
     return new Response(head?null:page.html,{status:page.status,headers:{
       "content-type":"text/html;charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff",

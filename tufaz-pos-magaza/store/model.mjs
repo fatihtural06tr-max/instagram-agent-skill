@@ -24,11 +24,19 @@ export const slugFor = s => s.toLocaleLowerCase("tr").replaceAll("ı","i").norma
 export const productPath = p => "/" + p.category + "/" + p.slug;
 export const publiclyVisible = p => p.status !== "draft";
 export const addable = p => p.status === "active" && p.price !== null && p.stock !== 0;
+// Her yayındaki ürün sepete eklenebilir. Fiyatı belli olan "buy", fiyatı teklifle belirlenen "quote",
+// henüz satışa açılmamış ürün "preorder" (ön kayıt) olarak sepete girer. Boş fiyat hiçbir yerde 0 TL sayılmaz.
+export const cartMode = p => !p || p.status === "draft" ? null : addable(p) ? "buy" : p.status === "soon" ? "preorder" : "quote";
+export const maxQuantity = p => p.category === "yazilim" || p.period !== "once" ? 1 : addable(p) ? Math.min(99, p.stock ?? 99) : 99;
+export const productType = p => p.category === "yazilim"
+  ? (p.period === "monthly" ? "Aylık abonelik" : p.period === "yearly" ? "Yıllık abonelik" : "Yazılım modülü")
+  : p.category === "donanim" ? "Fiziksel cihaz" : p.category === "nfc" ? "Kişiselleştirilmiş NFC ürünü" : "Hizmet";
+export const modeText = {buy:"Fiyatı belli", quote:"Fiyat teklifle belirlenir", preorder:"Ön kayıt, satışa açılınca haber verilir"};
 const formats = new Intl.NumberFormat("tr-TR",{style:"currency",currency:"TRY",minimumFractionDigits:0,maximumFractionDigits:2});
 export const priceText = cents => formats.format(cents / 100).replace("₺","").trim() + " TL";
 export const periodText = {once:"Tek seferlik",monthly:"Aylık",yearly:"Yıllık"};
 export const discountCode = s => inText(s, 32, "Kupon kodu").toUpperCase();
-export const imagePath = /^(?:\/assets\/(?:pos|terminal|printer|scanner|play|qr|voice|kitchen|nfc)\.svg|\/media\/[0-9a-f-]{36}\.(?:webp|png|jpg))$/;
+export const imagePath = /^(?:\/assets\/(?:pos|terminal|printer|scanner|play|qr|voice|kitchen|nfc|el-cihazi|odeme-terminali|nakit-cekmecesi|kasa-musteri-ekrani)\.svg|\/media\/[0-9a-f-]{36}\.(?:webp|png|jpg))$/;
 const addEvent = (state, action, subject) => {
   state.audit = [{at:new Date().toISOString(), action, subject}, ...state.audit].slice(0, 100);
 };
@@ -81,7 +89,7 @@ function couponFor(state, code, lines, total, now) {
   const used = state.requests.filter(r => r.status === "approved" && r.couponId === coupon.id).length;
   if (coupon.limit !== null && used >= coupon.limit) fail("Kupon kullanım sınırına ulaştı.");
   if (total < (coupon.minimum || 0)) fail("Kupon için sepet en az " + priceText(coupon.minimum) + " olmalı.");
-  const eligible = lines.filter(l => !coupon.category || l.category === coupon.category).reduce((a,l)=>a+l.amount,0);
+  const eligible = lines.filter(l => l.mode === "buy" && (!coupon.category || l.category === coupon.category)).reduce((a,l)=>a+l.amount,0);
   if (eligible === 0) fail("Kupon bu sepetteki ürünlerde geçerli değil.");
   const value = coupon.type === "percent" ? Math.round(eligible * coupon.value / 100) : coupon.value;
   return {id:coupon.id,code:coupon.code,eligible,category:coupon.category,amount:Math.min(value,eligible,coupon.maximum ?? eligible)};
@@ -97,20 +105,24 @@ export function quoteCart(state, input, now = Date.now()) {
   }
   const lines = [...combined].map(([id,quantity]) => {
     const p = state.products.find(p => p.id === id);
-    if (!p || !addable(p)) fail("Sepette satışa kapalı bir ürün var. Ürünü kaldırıp yeniden deneyin.");
-    if (quantity > (p.period === "once" ? (p.stock ?? 99) : 1)) fail(p.name + " için seçilen adet uygun değil.");
-    return {id:p.id,sku:p.sku,name:p.name,url:productPath(p),category:p.category,period:p.period,
-      image:p.image,price:p.price,vatRate:p.vat,quantity,amount:p.price*quantity};
+    const mode = cartMode(p);
+    if (!mode) fail("Sepette yayından kalkmış bir ürün var. Ürünü kaldırıp yeniden deneyin.");
+    if (quantity > maxQuantity(p)) fail(p.name + " için seçilen adet uygun değil.");
+    const priced = mode === "buy";
+    return {id:p.id,sku:p.sku,name:p.name,url:productPath(p),category:p.category,period:p.period,mode,
+      image:p.image,price:priced ? p.price : null,vatRate:p.vat,quantity,amount:priced ? p.price*quantity : null,
+      maxQuantity:maxQuantity(p)};
   });
-  const subtotal = lines.reduce((a,l)=>a+l.amount,0);
+  const buy = lines.filter(l => l.mode === "buy");
+  const subtotal = buy.reduce((a,l)=>a+l.amount,0);
   const code = discountCode(input.coupon);
-  const coupon = code ? couponFor(state, code, lines, subtotal, now) : null;
+  const coupon = code ? couponFor(state, code, buy, subtotal, now) : null;
   const discount = coupon?.amount ?? 0;
   const net = subtotal - discount;
   let remainingDiscount = discount;
   let remainingEligible = coupon?.eligible ?? 0;
   let vat = 0;
-  for (const line of lines) {
+  for (const line of buy) {
     if (coupon && (!coupon.category || coupon.category === line.category)) {
       const part = Math.min(remainingDiscount, Math.round(line.amount * remainingDiscount / remainingEligible));
       remainingDiscount -= part;
@@ -120,12 +132,16 @@ export function quoteCart(state, input, now = Date.now()) {
       vat += Math.round(line.amount * line.vatRate / 100);
     }
   }
-  const monthly = lines.filter(l=>l.period === "monthly").reduce((a,l)=>a+l.amount,0);
-  const yearly = lines.filter(l=>l.period === "yearly").reduce((a,l)=>a+l.amount,0);
-  const taxKnown = lines.length > 0 && lines.every(l=>l.vatRate !== null);
+  const monthly = buy.filter(l=>l.period === "monthly").reduce((a,l)=>a+l.amount,0);
+  const yearly = buy.filter(l=>l.period === "yearly").reduce((a,l)=>a+l.amount,0);
+  const taxKnown = buy.length > 0 && buy.every(l=>l.vatRate !== null);
   return {lines,subtotal,discount,net,tax:taxKnown ? vat : null,total:taxKnown ? net + vat : null,monthly,yearly,
+    quoteCount:lines.filter(l=>l.mode === "quote").length,preorderCount:lines.filter(l=>l.mode === "preorder").length,
+    plans:buy.filter(l=>l.category === "yazilim" && l.period !== "once").length,
     coupon:coupon ? {id:coupon.id,code:coupon.code} : null};
 }
+
+export const businessTypes = {"":"Seçilmedi",kafe:"Kafe",restoran:"Restoran",oyun:"Oyun / nargile kafe",premium:"Premium restoran",paket:"Paket servis",zincir:"Zincir / çok şube",diger:"Diğer"};
 
 export function submitRequest(state, input) {
   const key = inText(input.key,36,"İşlem anahtarı",true);
@@ -142,14 +158,19 @@ export function submitRequest(state, input) {
   if (input.kind === "cart") {
     selection = quoteCart(state,input);
     if (!selection.lines.length) fail("Sepetinize en az bir ürün ekleyin.");
-    subject = "Paket ve ürün talebi";
+    subject = selection.lines.some(l=>l.mode === "buy") ? "Paket ve ürün talebi" : "Teklif ve ön kayıt talebi";
   } else {
     const item = state.products.find(p=>p.id === input.product && publiclyVisible(p));
     if (input.product && !item) fail("Ürün bulunamadı.",404);
     subject = item?.name || "Genel bilgi ve kurulum";
   }
+  const phone = inText(input.phone,25,"Telefon");
+  if (phone && !/^\+?[0-9 ()-]{7,25}$/.test(phone)) fail("Geçerli bir telefon numarası girin.");
+  const businessType = inText(input.businessType,20,"İşletme türü");
+  if (!Object.hasOwn(businessTypes,businessType)) fail("İşletme türünü kontrol edin.");
   const request = {id:crypto.randomUUID(),key,reference:"TFZ-" + crypto.randomUUID().slice(0,12).toUpperCase(),
     email, business:inText(input.business,100,"İşletme adı",true), message:inText(input.message,700,"Not"),
+    phone, businessType, city:inText(input.city,60,"Şehir ve ilçe"),
     subject,selection,couponId:selection?.coupon?.id ?? null,status:"new", at:new Date().toISOString()};
   state.requests.unshift(request);
   addEvent(state,"Talep alındı",request.reference);
@@ -206,7 +227,7 @@ export function updateAdmin(state, input) {
     if (email && !validEmail(email)) fail("Geçerli bir e-posta girin.");
     if (phone && !/^\+?[0-9 ()-]{7,25}$/.test(phone)) fail("Geçerli bir telefon girin.");
     state.settings = {heroTitle:inText(s.heroTitle,60,"Ana başlık",true),heroText:inText(s.heroText,140,"Ana açıklama",true),
-      email,phone,notice:inText(s.notice,100,"Duyuru")};
+      email,phone,notice:inText(s.notice,100,"Duyuru"),indexing:s.indexing === true};
     subject = "Mağaza";
   } else {
     fail("İşlem bulunamadı.",404);

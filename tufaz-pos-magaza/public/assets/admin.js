@@ -21,6 +21,8 @@
   const statusNames={active:"Yayında",quote:"Teklif",soon:"Yakında",draft:"Taslak"};
   const requestStatus={new:"Yeni",review:"İnceleniyor",approved:"Onaylandı",closed:"Kapandı"};
   const periods={once:"Tek seferlik",monthly:"Aylık",yearly:"Yıllık"};
+  const businessTypes={kafe:"Kafe",restoran:"Restoran",oyun:"Oyun / nargile kafe",premium:"Premium restoran",paket:"Paket servis",zincir:"Zincir / çok şube",diger:"Diğer"};
+  const lineValue=l=>l.amount==null?(l.mode==="preorder"?"Ön kayıt":"Teklif"):tl(l.amount);
   const option=(value,label,selected)=>`<option value="${h(value)}"${selected===value?" selected":""}>${h(label)}</option>`;
   const select=(name,values,selected)=>`<select name="${name}">${Object.entries(values).map(([value,label])=>option(value,label,selected)).join("")}</select>`;
   const label=(name,field)=>`<label>${name}${field}</label>`;
@@ -53,7 +55,7 @@
       }).join(""):"<p class='empty'>Henüz kupon oluşturulmadı.</p>"}</div>`;
   }
   function productForm(p={}){
-    const samples={"":"Görselsiz","/assets/pos.svg":"Adisyon ekranı","/assets/kitchen.svg":"Mutfak ekranı","/assets/printer.svg":"Yazıcı","/assets/terminal.svg":"POS terminali","/assets/scanner.svg":"Okuyucu","/assets/qr.svg":"QR Menü","/assets/voice.svg":"Sesli sipariş","/assets/play.svg":"Oyun","/assets/nfc.svg":"NFC"};
+    const samples={"":"Görselsiz","/assets/pos.svg":"Adisyon ekranı","/assets/kitchen.svg":"Mutfak ekranı","/assets/printer.svg":"Yazıcı","/assets/terminal.svg":"POS terminali","/assets/odeme-terminali.svg":"Ödeme terminali / ÖKC","/assets/kasa-musteri-ekrani.svg":"Müşteri ekranı","/assets/nakit-cekmecesi.svg":"Kasa çekmecesi","/assets/el-cihazi.svg":"El terminali","/assets/scanner.svg":"Okuyucu","/assets/qr.svg":"QR Menü","/assets/voice.svg":"Sesli sipariş","/assets/play.svg":"Oyun","/assets/nfc.svg":"NFC"};
     if(p.image?.startsWith("/media/"))samples[p.image]="Mevcut yüklenen görsel";
     return `<h2>${p.id?"Ürünü düzenle":"Yeni ürün"}</h2><form class="form admin-form" id="product-form" data-id="${h(p.id)}">
       <div class="fields">
@@ -96,8 +98,8 @@
     const requests=snapshot.state.requests;
     return `<p class="fine">Bunlar teklif ve kurulum talepleridir. Ödeme veya abonelik oluşturmaz.</p><div class="admin-rows">${requests.length?requests.map(r=>row(
       `<details><summary><strong>${h(r.reference)} · ${h(r.business)}</strong><small>${h(r.subject)} · ${stamp(r.at)}</small></summary>
-        <p class="request-meta">${h(r.email)}\n${h(r.message)}</p>${r.selection?`<ul>${r.selection.lines.map(l=>`<li>${l.quantity} × ${h(l.name)} · ${tl(l.amount)}</li>`).join("")}</ul>
-        <p class="fine">İlk dönem ${tl(r.selection.total??r.selection.net)}${r.selection.tax===null?" + KDV":""} ${r.selection.coupon?"· "+h(r.selection.coupon.code):""}</p>`:""}</details>`,
+        <p class="request-meta">${h(r.email)}${r.phone?"\n"+h(r.phone):""}${r.businessType?"\n"+h(businessTypes[r.businessType]||r.businessType):""}${r.city?" · "+h(r.city):""}${r.message?"\n"+h(r.message):""}</p>${r.selection?`<ul>${r.selection.lines.map(l=>`<li>${l.quantity} × ${h(l.name)} · ${lineValue(l)}</li>`).join("")}</ul>
+        <p class="fine">${r.selection.lines.some(l=>l.amount!=null)?`İlk dönem ${tl(r.selection.total??r.selection.net)}${r.selection.tax===null?" + KDV":""}`:"Fiyatı belli ürün yok"} ${r.selection.coupon?"· "+h(r.selection.coupon.code):""}${r.selection.quoteCount?` · ${r.selection.quoteCount} teklif`:""}${r.selection.preorderCount?` · ${r.selection.preorderCount} ön kayıt`:""}</p>`:""}</details>`,
       `<label>Durum<select data-request="${h(r.id)}">${Object.entries(requestStatus).map(([value,name])=>option(value,name,r.status)).join("")}</select></label>`
     )).join(""):"<p class='empty'>Henüz talep yok.</p>"}</div>`;
   }
@@ -109,6 +111,8 @@
       ${label("İletişim e-postası",field("email",s.email,'type="email" maxlength="160"'))}
       ${label("İletişim telefonu",field("phone",s.phone,'type="tel" maxlength="25"'))}
       ${label("Üst duyuru (boşsa gizli)",field("notice",s.notice,'maxlength="100"'))}
+      ${checked("indexing",s.indexing,"Arama motorlarına aç (robots.txt, site haritası ve index etiketi)")}
+      <p class="fine">Satış koşulları, fiyatlar ve yasal metinler kesinleşmeden açmayın. Kapalıyken tüm sayfalar noindex olarak yayınlanır.</p>
       <button class="btn primary" type="submit">Ayarları Kaydet</button></form>`;
   }
   function history(){
@@ -204,7 +208,7 @@
         Object.assign(data,{value:data.type==="fixed"?cents(data.value):number(data.value),minimum:cents(data.minimum),maximum:cents(data.maximum),
           start:dateIso(data.start),end:dateIso(data.end),limit:number(data.limit),active:data.active==="on"});
         await change({action:"save-coupon",id,item:data});
-      }else if(form.id==="settings-form"){await change({action:"save-settings",item:data})}
+      }else if(form.id==="settings-form"){await change({action:"save-settings",item:{...data,indexing:data.indexing==="on"}})}
     }catch(error){msg(status,error.message,true);button.disabled=false}
   });
   reload().catch(error=>{view.textContent="Panel açılmadı.";msg(status,error.message,true)});

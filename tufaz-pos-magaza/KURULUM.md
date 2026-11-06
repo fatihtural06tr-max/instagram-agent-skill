@@ -17,7 +17,8 @@ Portu değiştirmek için `node portable/server.mjs --port 4180` komutunu kullan
 - **Yayın durumu** yayında, teklif, yakında veya taslak olarak seçilir. Sepete açık ürün için fiyat gerekir. Fiyatı kesinleşmeyen ürün teklif olarak yayınlanabilir. Taslaklar mağazada görünmez.
 - **Kuponlar** bölümünde yüzde veya tutar indirimi, kategori, alt sepet tutarı, en yüksek indirim, başlangıç ve bitiş ile kullanım kotası tanımlanır. İndirim ilk döneme uygulanır. Kota, onaylanan talepler üzerinden sayılır. Sepet fiyat ve kupon uygunluğunu sunucudan hesaplar.
 - **Talepler** bölümünde ürün teklifi, kurulum ve sepet talepleri incelenir. Talep referansı bir ödeme veya abonelik numarası değildir.
-- **Mağaza ayarları** ana sayfa başlığı ve kısa metni, duyuru ve iletişim bilgilerini düzenler. **İşlem geçmişi** son 100 yönetim ve talep hareketini gösterir.
+- **Mağaza ayarları** ana sayfa başlığı ve kısa metni, duyuru ve iletişim bilgilerini düzenler. **Arama motorlarına aç** kutusu işaretlenene kadar tüm sayfalar `noindex` yayınlanır, `robots.txt` her şeyi kapatır ve `/sitemap.xml` yanıt vermez. Kutu açılınca site haritası ve `index` etiketi devreye girer; “Yakında” ürün ve sayfalar yine indekslenmez. **İşlem geçmişi** son 100 yönetim ve talep hareketini gösterir.
+- **Sepet:** Yayındaki her ürün sepete eklenir. Fiyatı belli ürün toplama girer; fiyatsız veya “Teklif” ürün “Teklif ile fiyatlanacaklar” grubunda, “Yakında” ürün “Ön kayıt” grubunda görünür. Fiyatsız ürün hiçbir yerde 0 TL sayılmaz. Talepte işletme türü, telefon ve şehir/ilçe isteğe bağlı olarak alınır.
 
 ## Veri ve yedek
 
@@ -27,7 +28,7 @@ Bir VPS’te ters vekil ve HTTPS kullanın. Sunucuyu dışarıya doğrudan açma
 
 ## Bu sürümün kapsamı
 
-Katalog, ürün detayları, fiyatlar, sepet, kupon, ödeme özeti, talep formu ve yönetim paneli çalışır. İlk dört paket önceki plandaki çalışma fiyatlarıyla başlar. Donanım ve ayrı modüllerde teyitsiz fiyat gösterilmez. Vitrin görselleri ve ürün çizimleri temsilidir.
+Katalog, ürün detayları, fiyatlar, sepet (fiyatlı, teklif ve ön kayıt kalemleri), kupon, talep özeti, talep formu, kazanç hesaplayıcı ve yönetim paneli çalışır. Sürüm 2.0.0 ile gelen değişiklikler `DEGISIKLIKLER.md` dosyasındadır. İlk dört paket önceki plandaki çalışma fiyatlarıyla başlar. Donanım ve ayrı modüllerde teyitsiz fiyat gösterilmez. Vitrin görselleri ve ürün çizimleri temsilidir.
 
 Canlı sanal POS, otomatik abonelik tahsilatı, lisans aktivasyonu ve kargo entegrasyonu için sağlayıcı ve operasyon bilgileri ayrıca gerekir. Bu sürüm kart bilgisi almaz. Satış metinleri ve indeksleme, mağazanın gerçek satış koşulları kesinleştiğinde yayına hazırlanmalıdır.
 

@@ -89,8 +89,70 @@ test("Mağaza, yönetim, görsel ve kupon işlemleri", async t => {
   assert.equal(pending.length,1);
   assert.equal((await update({action:"request-status",id:pending[0].id,status:"approved"}))[0],200);
   assert.equal((await post("/api/quote",{items,coupon:"TEST10"})).status,400);
+
+  // Her yayındaki ürün sepete eklenebilir: fiyatlı, teklif ve ön kayıt kalemleri ayrı hesaplanır.
+  for (const route of ["/magaza","/yazilim","/donanim","/nfc","/hizmet","/fiyatlar"]) {
+    const page=await html(route);
+    const cards=page.split('<article class="market-product">').slice(1);
+    assert.ok(cards.length>0,route);
+    for (const card of cards) assert.match(card,/class="btn primary add"/,route+" kartında Sepete Ekle yok");
+  }
+  const mixed=await post("/api/quote",{items:[{id:"restoran",quantity:1},{id:"qr-menu",quantity:1},{id:"termal-fis-yazici",quantity:3},{id:"play",quantity:1}]}).then(r=>r.json());
+  assert.deepEqual(mixed.lines.map(l=>l.mode),["buy","quote","quote","preorder"]);
+  assert.equal(mixed.subtotal,299900);
+  assert.equal(mixed.monthly,299900);
+  assert.deepEqual([mixed.quoteCount,mixed.preorderCount],[2,1]);
+  assert.ok(mixed.lines.filter(l=>l.mode!=="buy").every(l=>l.amount===null && l.price===null),"Fiyatsız ürün 0 TL sayılmamalı");
+  assert.equal((await post("/api/quote",{items:[{id:"qr-menu",quantity:2}]})).status,400,"Yazılım modülü tek adet olmalı");
+  const quoteOnly=await post("/api/quote",{items:[{id:"google-yorum-karti",quantity:5}]}).then(r=>r.json());
+  assert.deepEqual([quoteOnly.subtotal,quoteOnly.total,quoteOnly.tax],[0,null,null]);
+  const quoteRequest=await post("/api/request",{items:[{id:"google-yorum-karti",quantity:5},{id:"play",quantity:1}],kind:"cart",email:"nfc@example.invalid",
+    business:"NFC işletmesi",phone:"0312 555 00 00",businessType:"kafe",city:"Ankara, Çankaya",key:"abcdef1234567890abcdef1234567890abcd"});
+  assert.equal(quoteRequest.status,201);
+  const saved=(await state()).state.requests[0];
+  assert.deepEqual([saved.subject,saved.phone,saved.businessType,saved.city],["Teklif ve ön kayıt talebi","0312 555 00 00","kafe","Ankara, Çankaya"]);
+  assert.equal((await post("/api/request",{items:[],kind:"contact",email:"a@example.invalid",business:"X",businessType:"uydurma",key:"bbcdef1234567890abcdef1234567890abcd"})).status,400);
+
+  // Bas-Konuş sesli sipariş olarak anlatılır, telsiz olarak değil.
+  const voicePage=await html("/sesli-siparis");
+  assert.match(voicePage,/önizleme/i);
+  assert.doesNotMatch(voicePage,/telsiz|walkie/i);
+  // Hamburger menü, ortak sayfa başlığı, rehber bağlantısı ve kazanç hesaplayıcı
+  const home=await html("/");
+  assert.match(home,/aria-controls="site-menu"/);
+  assert.match(home,/id="site-menu"/);
+  assert.match(await html("/yazilim/bas-konus"),/href="\/sesli-siparis"/);
+  assert.match(await html("/kazanc-hesaplayici"),/nakit tasarruf değildir/);
+  assert.match(await html("/yazilim/qr-menu"),/rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/yazilim\/qr-menu"/);
+  assert.match(await html("/paketler/kafe"),/rel="canonical" href="[^"]+\/yazilim\/kafe"/);
+
+  // Arama motoru erişimi varsayılan kapalı, panelden açılır.
+  assert.match(await fetch(origin+"/robots.txt").then(r=>r.text()),/Disallow: \//);
+  assert.equal((await fetch(origin+"/sitemap.xml")).status,404);
+  assert.match(home,/noindex,nofollow/);
+  const settings=(await state()).state.settings;
+  assert.equal((await update({action:"save-settings",item:{...settings,indexing:true}}))[0],200);
+  assert.match(await fetch(origin+"/robots.txt").then(r=>r.text()),/Sitemap: http/);
+  const sitemap=await fetch(origin+"/sitemap.xml").then(r=>r.text());
+  assert.match(sitemap,/\/yazilim\/kafe</);
+  assert.doesNotMatch(sitemap,/\/yazilim\/play<|\/sepet</);
+  assert.match(await html("/"),/content="index,follow"/);
+  assert.match(await html("/yazilim/play"),/content="noindex,follow"/);
+
   await stop();
   origin=await start();
   assert.match(await html("/donanim/isletme-yazicisi"),/İşletme Yazıcısı/);
   assert.equal((await fetch(origin+path)).status,200);
+});
+
+test("Eski kayıt yeni sürüme taşınır", async () => {
+  const {initialState,migrateState,SEED_VERSION}=await import("../store/seed.mjs");
+  const state=initialState();
+  state.seedVersion=1;
+  state.products=state.products.filter(p=>!["garson-uygulamasi","qr-siparis","egitim"].includes(p.id));
+  const before=state.products.length;
+  assert.equal(migrateState(state),true);
+  assert.equal(state.products.length,before+3);
+  assert.equal(state.seedVersion,SEED_VERSION);
+  assert.equal(migrateState(state),false);
 });
