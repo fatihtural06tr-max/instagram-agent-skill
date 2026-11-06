@@ -1,0 +1,13 @@
+{
+  "name": "tufaz-pos-magaza",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node portable/server.mjs",
+    "test": "node --test tests/shop.test.mjs"
+  }
+}
